@@ -1,0 +1,442 @@
+import java.awt.BorderLayout;
+import java.awt.Color;
+import java.awt.Component;
+import java.awt.Dimension;
+import java.awt.FlowLayout;
+import java.awt.event.ActionEvent;
+import java.awt.event.ActionListener;
+import java.awt.event.WindowAdapter;
+import java.awt.event.WindowEvent;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Statement;
+
+import javax.swing.AbstractCellEditor;
+import javax.swing.DefaultCellEditor;
+import javax.swing.DefaultRowSorter;
+import javax.swing.JButton;
+import javax.swing.JComboBox;
+import javax.swing.JFrame;
+import javax.swing.JLabel;
+import javax.swing.JMenu;
+import javax.swing.JMenuBar;
+import javax.swing.JMenuItem;
+import javax.swing.JPanel;
+import javax.swing.JScrollPane;
+import javax.swing.JTable;
+import javax.swing.JTextField;
+import javax.swing.KeyStroke;
+import javax.swing.RowFilter;
+import javax.swing.RowSorter;
+import javax.swing.table.DefaultTableModel;
+import javax.swing.table.TableCellEditor;
+import javax.swing.table.TableCellRenderer;
+import javax.swing.table.TableColumn;
+import javax.swing.table.TableColumnModel;
+import javax.swing.table.TableModel;
+import javax.swing.table.TableRowSorter;
+
+class Connect{						//连接数据库
+	public static final String DBDRIVER="org.gjt.mm.mysql.Driver";
+	public static final String DBURL="jdbc:mysql://localhost:3306/AddressBook";
+	public static final String DBUSER="root";
+	public static final String DBPASS="864172";
+	static Connection conn=null;
+	static Statement stmt=null;
+	static ResultSet rs=null;
+	public Connect(){
+		try {
+			Class.forName(DBDRIVER);
+		} catch (ClassNotFoundException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+		try {
+			conn=DriverManager.getConnection(DBURL, DBUSER, DBPASS);
+		} catch (SQLException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+		try {
+			stmt=conn.createStatement();
+		} catch (SQLException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+	}
+}
+
+class newAddressBook implements ActionListener{
+	static JTable table=null;
+	private DefaultTableModel tableModel=null;
+	private String[] titles={"编号","用户名",""};
+	private Object[][] userInfo={};
+	static JPanel Bar=new JPanel();
+	static JPanel Bar2=new JPanel();
+	static JPanel Bar3=new JPanel();
+	static JScrollPane scr=new JScrollPane();
+	private JButton open=new JButton("打开通讯录");
+	private JButton add=new JButton("新建通讯录");
+	private JButton remove=new JButton("删除通讯录");
+	private JButton add2=new JButton("添加");
+	public newAddressBook(){
+		this.tableModel=new DefaultTableModel(this.userInfo,this.titles);
+		this.table=new JTable(this.tableModel);
+		scr=new JScrollPane(this.table);
+		RowSorter<TableModel> sorter = new TableRowSorter<TableModel>(tableModel);;//添加这两条实现排序
+		table.setRowSorter(sorter);//添加这两条实现排序
+		Bar.add(this.add);
+		Bar.add(this.open);
+		Bar.add(this.remove);
+		Bar2.setPreferredSize(new Dimension(60,0));
+		
+		new Connect();
+		String sql="select *from user";
+		try {
+			Connect.stmt.executeQuery(sql);
+		} catch (SQLException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+		try {
+			Connect.rs=Connect.stmt.executeQuery(sql);
+		} catch (SQLException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+		try {
+			while(Connect.rs.next()){
+				String rId=Connect.rs.getString("id");
+				String rName=Connect.rs.getString("Name");
+				tableModel.addRow(new Object[]{rId,rName});
+			}
+		}catch (SQLException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+		new Close();		//调用方法关闭数据库
+		
+		JLabel label=new JLabel("筛选条件:");    //添加下面这一段实现筛选
+		JLabel label2=new JLabel("     ");
+		JButton button=new JButton("筛选");
+		final JTextField filterText=new JTextField(5);
+		JPanel pan=new JPanel();
+		pan.add(label);pan.add(filterText);pan.add(button);
+		pan.add(label2);
+		this.Bar3.add(pan);
+		
+		button.addActionListener(new ActionListener(){
+			public void actionPerformed(ActionEvent e){
+				String text=filterText.getText();
+					if(text.length()==0){
+						((DefaultRowSorter<TableModel, Integer>) sorter).setRowFilter(null);
+					}else{
+						((DefaultRowSorter<TableModel, Integer>) sorter).setRowFilter(RowFilter.regexFilter(text));
+					}
+					//tableModel.fireTableDataChanged();
+				}
+			});
+													//添加上面这一段实现筛选
+		
+		this.open.addActionListener(this);
+		this.add.addActionListener(this);
+		this.add2.addActionListener(this);
+		this.remove.addActionListener(this);
+		
+	}
+	public void actionPerformed(ActionEvent e){
+		if(e.getSource()==this.open){
+			int row=newAddressBook.table.getSelectedRow();//获取选中的行号
+			Object oId=newAddressBook.table.getValueAt(row,0);//根据行号和列号，获取某个单元格的值
+			Object oName=newAddressBook.table.getValueAt(row,1);
+			String Id=(String)oId;
+			String Name=(String)oName;
+			new ChangeTable(Id,Name);
+		}
+		if(e.getSource()==this.add){
+			Bar2.add(add2);
+			Bar2.validate();
+			this.tableModel.addRow(new Object[]{});	
+		}
+		if(e.getSource()==this.remove){
+			int row=table.getSelectedRow();//获取选中的行号
+			Object oNo=table.getValueAt(row,0);//根据行号和列号，获取某个单元格的值
+			int modelRow=table.convertRowIndexToModel(row);//！！！很重要的一行，将视图中的行数转换为模型中的行数※
+			this.tableModel.removeRow(modelRow);//删除所选行
+			String sql="delete from user where id='"+oNo+"'";
+			String sql2="delete from contacts where id='"+oNo+"'";
+			new Delect(sql);
+			new Delect(sql2);
+		}
+		if(e.getSource()==this.add2){
+			int row=newAddressBook.table.getSelectedRow();//获取选中的行号
+			Object oId=newAddressBook.table.getValueAt(row,0);//根据行号和列号，获取某个单元格的值
+			Object oName=newAddressBook.table.getValueAt(row,1);
+			String sql="Insert into user(id,name)"+"values('"+oId+"','"+oName+"')";
+			new Insert(sql);
+			System.out.println("添加成功");
+		}
+	}
+}
+
+class ChangeTable implements ActionListener{
+	static String Id;
+	static String Name;
+	private String sId=null;
+	private String sName=null;
+	private JFrame frame=new JFrame("Welcom");
+	private JTable table=null;
+	private DefaultTableModel tableModel=null;
+	private String[] titles={"编号","姓名","性别","类别","家庭住址","电话号码1","电话号码2","电话号码3"};
+	private Object[][] userInfo={};
+	private JButton addRowBtn=new JButton("增加");
+	private JButton removeRowBtn=new JButton("删除");
+	private JComboBox sexList=new JComboBox();
+	private JComboBox classList=new JComboBox();
+	int num=0;
+	private JTextField text=new JTextField(5);
+	private JLabel lab=new JLabel();
+	private JLabel lab2=new JLabel("通讯录人数:");
+	private JPanel Bar=new JPanel();
+	private JButton add=new JButton("添加");
+	public ChangeTable(String Id,String Name){
+		sId=Id;
+		sName=Name;
+		this.tableModel=new DefaultTableModel(this.userInfo,this.titles);
+		this.table=new JTable(this.tableModel);
+		RowSorter<TableModel> sorter = new TableRowSorter<TableModel>(tableModel);;//添加这两条实现排序
+		table.setRowSorter(sorter);//添加这两条实现排序
+		this.sexList.addItem("男");
+		this.sexList.addItem("女");
+		this.classList.addItem("亲属");
+		this.classList.addItem("朋友");
+		this.classList.addItem("同学");
+		this.classList.addItem("同事");
+		this.table.getColumnModel().getColumn(2).setCellEditor(new DefaultCellEditor(this.sexList));
+		this.table.getColumnModel().getColumn(3).setCellEditor(new DefaultCellEditor(this.classList));
+		JScrollPane scr=new JScrollPane(this.table);
+		JPanel toolBar=new JPanel();
+		toolBar.add(this.addRowBtn);
+		toolBar.add(this.removeRowBtn);
+		toolBar.add(this.lab2);
+		toolBar.add(this.lab);
+		lab.setText(Integer.toString(num));
+		this.frame.add(toolBar,BorderLayout.NORTH);
+		this.frame.add(scr,BorderLayout.CENTER);
+		Bar.setPreferredSize(new Dimension(60,0));
+		this.frame.add(Bar,BorderLayout.EAST);
+		this.frame.setSize(500,400);
+		frame.setLocation(320,220);
+		this.frame.setVisible(true);
+		this.addRowBtn.addActionListener(this);
+		this.removeRowBtn.addActionListener(this);
+		this.add.addActionListener(this);
+		
+		new Connect();
+		String sql="select * from contacts where id='"+Id+"' and user='"+Name+"'";
+		try {
+			Connect.stmt.executeQuery(sql);
+		} catch (SQLException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+		try {
+			Connect.rs=Connect.stmt.executeQuery(sql);
+		} catch (SQLException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+		try {
+			while(Connect.rs.next()){
+				String rNo=Connect.rs.getString("no");
+				String rName=Connect.rs.getString("Name");
+				String rSex=Connect.rs.getString("sex");
+				String rType=Connect.rs.getString("type");
+				String rAddress=Connect.rs.getString("address");
+				String rTel1=Connect.rs.getString("tel1");
+				String rTel2=Connect.rs.getString("tel2");
+				String rTel3=Connect.rs.getString("tel3");
+				tableModel.addRow(new Object[]{rNo,rName,rSex,rType,rAddress,rTel1,rTel2,rTel3});
+				num=num+1;
+				String snum=Integer.toString(num);
+				lab.setText(snum);
+			}
+		}catch (SQLException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+		new Close();		//调用方法关闭数据库
+		
+ 	
+		JLabel label=new JLabel("筛选条件:");    //添加下面这一段实现筛选
+		JLabel label2=new JLabel("     ");
+		JButton button=new JButton("筛选");
+		final JTextField filterText=new JTextField(5);
+		JPanel pan=new JPanel();
+		pan.add(label);pan.add(filterText);pan.add(button);
+		pan.add(label2);
+		this.frame.add(pan,BorderLayout.SOUTH);
+		
+		button.addActionListener(new ActionListener(){
+			public void actionPerformed(ActionEvent e){
+				String text=filterText.getText();
+					if(text.length()==0){
+						((DefaultRowSorter<TableModel, Integer>) sorter).setRowFilter(null);
+					}else{
+						((DefaultRowSorter<TableModel, Integer>) sorter).setRowFilter(RowFilter.regexFilter(text));
+					}
+					//tableModel.fireTableDataChanged();
+				}
+			});
+													//添加上面这一段实现筛选
+		
+	}
+	public void actionPerformed(ActionEvent e){
+		if(e.getSource()==this.addRowBtn){
+			Bar.add(add);
+			Bar.validate();
+			this.tableModel.addRow(new Object[]{"自动生成"});	
+		}
+		if(e.getSource()==this.add){
+			int row=table.getSelectedRow();//获取选中的行号
+			Object oName=table.getValueAt(row,1);//根据行号和列号，获取某个单元格的值
+			Object oSex=table.getValueAt(row,2);
+			Object oType=table.getValueAt(row,3);
+			Object oAddress=table.getValueAt(row,4);
+			Object oTel1=table.getValueAt(row,5);
+			Object oTel2=table.getValueAt(row,6);
+			Object oTel3=table.getValueAt(row,7);
+			String sql="Insert into contacts(id,user,name,sex,type,address,tel1,tel2,tel3)"
+			+"values('"+sId+"','"+sName+"','"+oName+"','"+oSex+"','"+oType+"','"+oAddress+"','"+oTel1+"','"+oTel2+"','"+oTel3+"')";
+			new Insert(sql);
+			frame.dispose();					//刷新数据的愚蠢小方法：关闭窗口再重新打开
+			new ChangeTable(sId,sName);
+		}
+		if(e.getSource()==this.removeRowBtn){
+			int row=table.getSelectedRow();//获取选中的行号
+			Object oNo=table.getValueAt(row,0);//根据行号和列号，获取某个单元格的值
+			int modelRow=table.convertRowIndexToModel(row);//！！！很重要的一行，将视图中的行数转换为模型中的行数※
+			this.tableModel.removeRow(modelRow);//删除所选行
+			String sql="delete from contacts where no='"+oNo+"'";
+			new Delect(sql);
+			num=num-1;
+			String snum=Integer.toString(num);
+			lab.setText(snum);
+		}
+	}
+
+
+}
+
+
+class Close{
+	public Close(){
+		try {
+			Connect.stmt.close();
+		} catch (SQLException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+		try {
+			Connect.rs.close();
+		} catch (SQLException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+		try {
+			Connect.conn.close();
+		} catch (SQLException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+	}
+}
+class Update{						//用来更新数据库
+	String sql;
+	public Update(String sql){
+		new Connect();
+		try {
+			Connect.stmt.executeUpdate(sql);
+		} catch (SQLException e1) {
+			// TODO Auto-generated catch block
+			e1.printStackTrace();
+		}
+		try{
+			Connect.stmt.close();
+		}catch(SQLException e){
+			e.printStackTrace();
+		}
+		try{
+			Connect.conn.close();
+		}catch(SQLException e){
+			e.printStackTrace();
+		}
+	}
+}
+class Insert{						//用来向某个数据库中插入数据
+	String sql;
+	public Insert(String sql){
+		new Connect();
+		try {
+			Connect.stmt.executeUpdate(sql);
+		} catch (SQLException e1) {
+			// TODO Auto-generated catch block
+			e1.printStackTrace();
+		}
+		try{
+			Connect.stmt.close();
+		}catch(SQLException e){
+			e.printStackTrace();
+		}
+		try{
+			Connect.conn.close();
+		}catch(SQLException e){
+			e.printStackTrace();
+		}
+	}
+}
+class Delect{						//用来向某个数据库中删除数据
+	String sql;
+	public Delect(String sql){
+		new Connect();
+		try {
+			Connect.stmt.executeUpdate(sql);
+		} catch (SQLException e1) {
+			// TODO Auto-generated catch block
+			e1.printStackTrace();
+		}
+		try{
+			Connect.stmt.close();
+		}catch(SQLException e){
+			e.printStackTrace();
+		}
+		try{
+			Connect.conn.close();
+		}catch(SQLException e){
+			e.printStackTrace();
+		}
+	}
+}
+
+public class S6EN2AddressBook {
+	public static void main(String args[]){
+		JFrame frame=new JFrame("通讯录");
+		JTable table=null;
+		new newAddressBook();
+		frame.add(newAddressBook.Bar,BorderLayout.NORTH);
+		frame.add(newAddressBook.Bar2,BorderLayout.EAST);
+		frame.add(newAddressBook.Bar3,BorderLayout.SOUTH);
+		frame.add(newAddressBook.scr,BorderLayout.CENTER);
+		frame.setVisible(true);
+		frame.addWindowListener(new WindowAdapter(){
+			public void windowClosing(WindowEvent arg0){
+				System.exit(1);
+			}
+		});
+		frame.setVisible(true);
+		frame.setSize(500, 400);
+		frame.setLocation(300,200);
+	}
+}
